@@ -1,11 +1,19 @@
 import { pgTable, serial, text, timestamp, integer, pgEnum } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
-// 1. تعریف نقش‌ها و وضعیت‌ها
-export const roleEnum = pgEnum('role', ['USER', 'MANAGER', 'ADMIN']);
+// ۱. تعریف دقیق نقش‌های سازمانی
+export const roleEnum = pgEnum('role', [
+  'USER',            // درخواست کننده عادی
+  'MANAGER',         // مدیر مستقیم
+  'PROCUREMENT',     // کارپرداز / تدارکات
+  'ADMIN_MANAGER',   // مدیر اداری
+  'FINANCE_MANAGER', // مدیر مالی
+  'CEO'              // مدیر عامل
+]);
+
 export const statusEnum = pgEnum('status', ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'NEEDS_ACTION']);
 
-// 2. جدول کاربران (با قابلیت سلسله مراتب)
+// ۲. جدول کاربران
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   name: text('name').notNull(),
@@ -13,11 +21,11 @@ export const users = pgTable('users', {
   password: text('password').notNull(),
   role: roleEnum('role').default('USER'),
   phone: text('phone'),
-  managerId: integer('manager_id'), // به خودش اشاره می‌کند (Self-referencing)
+  managerId: integer('manager_id'), 
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// 3. جدول درخواست‌های خرید
+// ۳. جدول درخواست‌ها
 export const requests = pgTable('requests', {
   id: serial('id').primaryKey(),
   requesterId: integer('requester_id').notNull().references(() => users.id),
@@ -30,7 +38,7 @@ export const requests = pgTable('requests', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-// 4. آیتم‌های داخل هر درخواست
+// ۴. آیتم‌های درخواست
 export const requestItems = pgTable('request_items', {
   id: serial('id').primaryKey(),
   requestId: integer('request_id').notNull().references(() => requests.id, { onDelete: 'cascade' }),
@@ -40,21 +48,17 @@ export const requestItems = pgTable('request_items', {
   link: text('link'),
 });
 
-// 5. لاگ و تاریخچه
+// ۵. لاگ‌ها
 export const requestLogs = pgTable('request_logs', {
   id: serial('id').primaryKey(),
   requestId: integer('request_id').notNull().references(() => requests.id, { onDelete: 'cascade' }),
   actorId: integer('actor_id').notNull().references(() => users.id),
-  action: text('action').notNull(), // 'SUBMIT', 'APPROVE', 'REJECT', 'COMMENT'
+  action: text('action').notNull(),
   comment: text('comment'),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// =================================================
-// تعریف روابط (Relations) - حیاتی برای کوئری‌ها
-// =================================================
-
-// روابط جدول کاربران
+// روابط (Relations)
 export const usersRelations = relations(users, ({ one, many }) => ({
   manager: one(users, {
     fields: [users.managerId],
@@ -66,7 +70,6 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
 }));
 
-// روابط جدول درخواست‌ها
 export const requestsRelations = relations(requests, ({ one, many }) => ({
   requester: one(users, {
     fields: [requests.requesterId],
@@ -76,11 +79,10 @@ export const requestsRelations = relations(requests, ({ one, many }) => ({
     fields: [requests.currentApproverId],
     references: [users.id],
   }),
-  items: many(requestItems), // 👈 این خط باعث می‌شود ارور 'items' حل شود
+  items: many(requestItems),
   logs: many(requestLogs),
 }));
 
-// روابط جدول آیتم‌ها
 export const requestItemsRelations = relations(requestItems, ({ one }) => ({
   request: one(requests, {
     fields: [requestItems.requestId],
@@ -88,7 +90,6 @@ export const requestItemsRelations = relations(requestItems, ({ one }) => ({
   }),
 }));
 
-// روابط جدول لاگ‌ها
 export const requestLogsRelations = relations(requestLogs, ({ one }) => ({
   request: one(requests, {
     fields: [requestLogs.requestId],

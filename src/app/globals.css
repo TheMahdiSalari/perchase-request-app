@@ -122,21 +122,36 @@
 }
 
 @media print {
-  /* مخفی کردن سایدبار، دکمه‌ها و هدر موقع چاپ */
-  aside, button, header, .no-print {
-    display: none !important;
+  @page {
+    size: A4;
+    margin: 10mm; /* حاشیه کاغذ */
   }
-  
-  /* تنظیم صفحه برای چاپ */
-  body, main {
+
+  body {
     background: white !important;
-    color: black !important;
-    padding: 0 !important;
-    margin: 0 !important;
+    print-color-adjust: exact; /* چاپ دقیق رنگ‌ها */
+    -webkit-print-color-adjust: exact;
   }
-  
-  /* بزرگ کردن محتوا */
-  .max-w-4xl {
-    max-width: 100% !important;
+
+  /* مخفی کردن همه چیز به جز فرم چاپ */
+  body * {
+    visibility: hidden;
+  }
+
+  /* فقط کانتینر مخصوص چاپ دیده شود */
+  #print-section, #print-section * {
+    visibility: visible;
+  }
+
+  #print-section {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  /* مخفی کردن هدر و فوتر پیش‌فرض مرورگر */
+  header, footer, aside, .no-print {
+    display: none !important;
   }
 }

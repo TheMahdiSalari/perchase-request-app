@@ -7,13 +7,15 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
+// ۱. تعریف تایپ دقیق نقش‌ها برای جلوگیری از ارور any
+type UserRole = 'USER' | 'MANAGER' | 'PROCUREMENT' | 'ADMIN_MANAGER' | 'FINANCE_MANAGER' | 'CEO';
+
 export async function processRequest(requestId: number, action: "APPROVE" | "REJECT", comment?: string) {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
 
   const request = await db.query.requests.findFirst({
     where: eq(requests.id, requestId),
-    with: { requester: true }
   });
 
   if (!request) throw new Error("Request not found");
@@ -31,16 +33,34 @@ export async function processRequest(requestId: number, action: "APPROVE" | "REJ
         nextStatus = "REJECTED";
         nextApproverId = null;
       } else {
-        const currentUserFull = await tx.query.users.findFirst({
-          where: eq(users.id, user.id)
-        });
+        // === منطق گردش کار سازمانی ===
+        const currentRole = user.role;
+        let nextRole = '';
+        
+        if (currentRole === 'MANAGER') nextRole = 'PROCUREMENT';
+        else if (currentRole === 'PROCUREMENT') nextRole = 'ADMIN_MANAGER';
+        else if (currentRole === 'ADMIN_MANAGER') nextRole = 'FINANCE_MANAGER';
+        else if (currentRole === 'FINANCE_MANAGER') nextRole = 'CEO';
+        else if (currentRole === 'CEO') nextRole = 'FINISHED';
 
-        if (currentUserFull?.managerId) {
-          nextApproverId = currentUserFull.managerId;
-          nextStatus = "PENDING";
-        } else {
-          nextApproverId = null;
+        if (nextRole === 'FINISHED') {
           nextStatus = "APPROVED";
+          nextApproverId = null;
+        } else {
+          // پیدا کردن مسئول مرحله بعد
+          const nextUser = await tx.query.users.findFirst({
+            // 👈 اصلاح مهم: کست کردن به تایپ دقیق UserRole به جای any
+            where: eq(users.role, nextRole as UserRole)
+          });
+
+          if (nextUser) {
+            nextApproverId = nextUser.id;
+            nextStatus = "PENDING";
+          } else {
+            // اگر مسئول مرحله بعد نبود، پروسه تکمیل می‌شود
+            nextStatus = "APPROVED"; 
+            nextApproverId = null;
+          }
         }
       }
 
@@ -60,16 +80,13 @@ export async function processRequest(requestId: number, action: "APPROVE" | "REJ
       });
     });
     
-    // رفرش کردن کش‌ها
     revalidatePath("/dashboard/requests");
     revalidatePath(`/dashboard/requests/${requestId}`);
 
-  } catch (error) {
-    console.error("Error processing request:", error);
-    return { success: false, message: "خطا در ثبت اطلاعات در دیتابیس" };
+  } catch (error: unknown) { // تایپ unknown برای رعایت قوانین strict
+    console.error("Error:", error);
+    throw new Error("خطا در پردازش درخواست");
   }
 
-  // ⭐️ نکته کلیدی: ریدایرکت باید بیرون از try/catch باشد
-  // اگر عملیات موفق بود، اینجا ریدایرکت می‌شود و اروری هم به کلاینت برنمی‌گردد
   redirect("/dashboard/requests");
 }

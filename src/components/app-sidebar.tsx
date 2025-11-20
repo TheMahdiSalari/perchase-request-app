@@ -43,7 +43,7 @@ const items = [
 
 export function AppSidebar() {
   return (
-    <Sidebar dir="rtl">
+    <Sidebar dir="rtl" className="print:hidden">
       <SidebarHeader>
         <div className="flex items-center gap-2 px-4 py-2">
            <div className="h-8 w-8 rounded bg-primary text-primary-foreground flex items-center justify-center font-bold">

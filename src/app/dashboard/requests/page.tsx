@@ -3,9 +3,7 @@ import { requests, requestLogs } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { eq, desc, inArray } from "drizzle-orm";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, Archive, ListChecks, FileInput } from "lucide-react";
 import Link from "next/link";
 
-// تعریف تایپ برای درخواست‌ها (برای جلوگیری از ارور any)
 type RequestType = typeof requests.$inferSelect & {
   requester?: { name: string; email: string } | null;
 };
@@ -31,34 +28,26 @@ export default async function RequestsListPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  // ۱. کارتابل جاری
   const pendingForMe = await db.query.requests.findMany({
     where: eq(requests.currentApproverId, user.id),
     with: { requester: true },
     orderBy: [desc(requests.createdAt)],
   });
 
-  // ۲. درخواست‌های خودم
   const myRequests = await db.query.requests.findMany({
     where: eq(requests.requesterId, user.id),
     orderBy: [desc(requests.createdAt)],
   });
 
-  // ۳. آرشیو
   const myLogs = await db.select({ requestId: requestLogs.requestId })
     .from(requestLogs)
     .where(eq(requestLogs.actorId, user.id));
   
   const logRequestIds = myLogs.map(l => l.requestId);
-  
-  // 👈 اصلاح مهم: حذف any و استفاده از تایپ صحیح
   let archivedRequests: RequestType[] = [];
   
   if (logRequestIds.length > 0) {
-    // برای جلوگیری از ارور احتمالی آرایه خالی در inArray
-    // از ست استفاده می‌کنیم تا تکراری‌ها حذف شوند
     const uniqueIds = Array.from(new Set(logRequestIds));
-    
     archivedRequests = await db.query.requests.findMany({
       where: inArray(requests.id, uniqueIds),
       with: { requester: true },
@@ -93,7 +82,7 @@ export default async function RequestsListPage() {
         </TabsContent>
 
         <TabsContent value="archive" className="mt-4">
-          <Card>
+           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><Archive/> سابقه‌ی بررسی‌های شما</CardTitle></CardHeader>
             <CardContent>
                 {processedByMe.length === 0 ? <p className="text-muted-foreground text-center py-8">شما هنوز درخواستی را بررسی نکرده‌اید.</p> : 
@@ -104,7 +93,7 @@ export default async function RequestsListPage() {
         </TabsContent>
 
         <TabsContent value="my-requests" className="mt-4">
-          <Card>
+           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><FileInput/> درخواست‌های ثبت شده توسط شما</CardTitle></CardHeader>
             <CardContent>
                  <RequestsTable data={myRequests} showAction={true} isMyRequest={true} />
@@ -116,7 +105,6 @@ export default async function RequestsListPage() {
   );
 }
 
-// 👈 اصلاح در ورودی کامپوننت: استفاده از تایپ به جای any
 function RequestsTable({ data, showAction, isMyRequest }: { data: RequestType[], showAction: boolean, isMyRequest?: boolean }) {
     return (
         <Table>

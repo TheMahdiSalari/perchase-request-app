@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { processRequest } from "@/actions/approvals";
 import { CheckCircle, XCircle, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "sonner"; // اگر نصب نکردی، میتونی حذفش کنی
 
 export function ApprovalActions({ requestId }: { requestId: number }) {
   const [isPending, startTransition] = useTransition();
@@ -25,9 +25,29 @@ export function ApprovalActions({ requestId }: { requestId: number }) {
     startTransition(async () => {
       try {
         await processRequest(requestId, action, comment);
+        
+        // اگر موفق شد، توست نمایش بده (ریدایرکت خودکار انجام میشه)
         toast.success("عملیات با موفقیت انجام شد");
-      } catch (error) {
-        alert("خطا در انجام عملیات");
+        
+      } catch (error: unknown) {
+        
+        // ✅ بخش مهم: نادیده گرفتن خطای ریدایرکت Next.js
+        if (error instanceof Error) {
+            if (error.message === "NEXT_REDIRECT" || error.message.includes("NEXT_REDIRECT")) {
+                return; // یعنی موفقیت‌آمیز بوده و داره میره صفحه بعد
+            }
+        }
+
+        console.error("Approval Error:", error);
+        
+        // نمایش پیام خطای واقعی
+        let errorMessage = "خطا در انجام عملیات";
+        if (error instanceof Error) {
+             // اگر خطای ما دستی پرتاب شده باشه (مثل 'دسترسی ندارید') اینجا نمایش داده میشه
+             errorMessage = error.message;
+        }
+        
+        alert(errorMessage);
       }
     });
   };
@@ -42,17 +62,17 @@ export function ApprovalActions({ requestId }: { requestId: number }) {
       <Button 
         onClick={() => handleAction("APPROVE")} 
         disabled={isPending}
-        className="bg-green-600 hover:bg-green-700"
+        className="bg-green-600 hover:bg-green-700 gap-2"
       >
-        {isPending ? <Loader2 className="animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+        {isPending ? <Loader2 className="animate-spin h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
         تایید و ارسال به مرحله بعد
       </Button>
 
       {/* دکمه رد (همراه با مودال) */}
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogTrigger asChild>
-          <Button variant="destructive" disabled={isPending}>
-            <XCircle className="mr-2 h-4 w-4" />
+          <Button variant="destructive" disabled={isPending} className="gap-2">
+            <XCircle className="h-4 w-4" />
             رد درخواست
           </Button>
         </DialogTrigger>
