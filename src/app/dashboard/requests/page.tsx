@@ -12,18 +12,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Archive, ListChecks, FileInput } from "lucide-react";
 import Link from "next/link";
+import { ExcelExportButton } from "@/components/excel-export-button";
 
-// ✅ اصلاح تایپ: اضافه کردن proformaData و اصلاح requester
+// تعریف تایپ دقیق
 type RequestType = typeof requests.$inferSelect & {
-  requester: typeof users.$inferSelect | null; // ممکن است null باشد
-  proformaData?: unknown; // فیلد جدید JSON
+  requester: typeof users.$inferSelect | null;
+  proformaData?: unknown;
 };
 
 function getStatusBadge(status: string | null) {
   switch (status) {
     case "APPROVED": return <Badge className="bg-green-600">تایید نهایی</Badge>;
     case "REJECTED": return <Badge variant="destructive">رد شده</Badge>;
-    case "WAITING_FOR_PROFORMA": return <Badge className="bg-orange-500">منتظر پیش‌فاکتور</Badge>; // وضعیت جدید
+    case "WAITING_FOR_PROFORMA": return <Badge className="bg-orange-500">منتظر پیش‌فاکتور</Badge>;
     case "PENDING": return <Badge className="bg-yellow-500 text-black">در جریان</Badge>;
     default: return <Badge variant="secondary">پیش‌نویس</Badge>;
   }
@@ -33,48 +34,67 @@ export default async function RequestsListPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  // ۱. کارتابل جاری (باید اقدام کنم)
+  // ۱. دریافت اطلاعات (کارتابل)
   const pendingForMe = await db.query.requests.findMany({
     where: eq(requests.currentApproverId, user.id),
     with: { requester: true },
     orderBy: [desc(requests.createdAt)],
   });
 
-  // ۲. درخواست‌های خودم (من ایجاد کردم)
+  // ۲. دریافت اطلاعات (درخواست‌های من)
   const myRequests = await db.query.requests.findMany({
     where: eq(requests.requesterId, user.id),
+    // 👇 اصلاح مهم: اضافه کردن این خط برای رفع ارور اکسل
+    with: { requester: true }, 
     orderBy: [desc(requests.createdAt)],
   });
 
-  // ۳. آرشیو (درخواست‌هایی که من روی آن‌ها اکشن انجام داده‌ام)
+  // ۳. دریافت اطلاعات (آرشیو)
   const myLogs = await db.select({ requestId: requestLogs.requestId })
     .from(requestLogs)
     .where(eq(requestLogs.actorId, user.id));
   
   const logRequestIds = myLogs.map(l => l.requestId);
-  
   let archivedRequests: RequestType[] = [];
   
   if (logRequestIds.length > 0) {
     const uniqueIds = Array.from(new Set(logRequestIds));
-    
-    // اینجا تایپ دقیق استفاده می‌شود تا ارور ندهد
     const results = await db.query.requests.findMany({
       where: inArray(requests.id, uniqueIds),
       with: { requester: true },
       orderBy: [desc(requests.createdAt)],
     });
-
     archivedRequests = results as RequestType[];
   }
 
-  // حذف درخواست‌های خودم از آرشیو (برای جلوگیری از تکرار)
   const processedByMe = archivedRequests.filter(req => req.requesterId !== user.id);
+
+  // ادغام داده‌ها برای اکسل
+  const allAccessibleRequests = [...processedByMe, ...myRequests, ...pendingForMe];
+  
+  // حذف تکراری‌ها
+  const uniqueRequestsMap = new Map();
+  allAccessibleRequests.forEach(item => {
+      uniqueRequestsMap.set(item.id, item);
+  });
+  const uniqueRequests = Array.from(uniqueRequestsMap.values()) as RequestType[];
+
+  // فیلتر کردن تایید شده‌ها برای اکسل
+  const excelData = uniqueRequests.filter(req => req.status === 'APPROVED');
+
+  const showExcelButton = user.role === 'FINANCE_MANAGER' || user.role === 'CEO';
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">مدیریت درخواست‌ها</h1>
+        
+        {showExcelButton && (
+            <ExcelExportButton 
+                data={excelData} 
+                filename="Gozaresh-Kharid-Taeid-Shode" 
+            />
+        )}
       </div>
 
       <Tabs defaultValue="inbox" className="w-full">
@@ -84,7 +104,6 @@ export default async function RequestsListPage() {
           <TabsTrigger value="my-requests">درخواست‌های من</TabsTrigger>
         </TabsList>
 
-        {/* تب ۱: کارتابل */}
         <TabsContent value="inbox" className="mt-4">
           <Card className={pendingForMe.length > 0 ? "border-blue-200 bg-blue-50/30" : ""}>
             <CardHeader><CardTitle className="flex items-center gap-2"><ListChecks/> نیاز به اقدام شما</CardTitle></CardHeader>
@@ -96,7 +115,6 @@ export default async function RequestsListPage() {
           </Card>
         </TabsContent>
 
-        {/* تب ۲: آرشیو */}
         <TabsContent value="archive" className="mt-4">
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><Archive/> سابقه‌ی بررسی‌های شما</CardTitle></CardHeader>
@@ -108,7 +126,6 @@ export default async function RequestsListPage() {
           </Card>
         </TabsContent>
 
-        {/* تب ۳: درخواست‌های من */}
         <TabsContent value="my-requests" className="mt-4">
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><FileInput/> درخواست‌های ثبت شده توسط شما</CardTitle></CardHeader>
@@ -122,7 +139,6 @@ export default async function RequestsListPage() {
   );
 }
 
-// کامپوننت جدول
 function RequestsTable({ data, showAction, isMyRequest }: { data: RequestType[], showAction: boolean, isMyRequest?: boolean }) {
     return (
         <Table>
