@@ -16,11 +16,12 @@ export async function submitRequest(data: CreateRequestValues) {
   }
 
   const { title, description, items } = validatedFields.data;
-  const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  
+  // 👈 تغییر: چون قیمت نداریم، مبلغ کل فعلاً صفر است
+  const totalAmount = 0;
 
   try {
     await db.transaction(async (tx) => {
-      // اگر کاربر مدیر مستقیم دارد، میرود برای او، وگرنه اتومات تایید میشود (سناریوی CEO)
       const approverId = user.managerId; 
       const initialStatus = approverId ? 'PENDING' : 'APPROVED';
 
@@ -39,7 +40,7 @@ export async function submitRequest(data: CreateRequestValues) {
             requestId: newRequest.id,
             name: item.name,
             quantity: item.quantity,
-            price: item.price,
+            price: 0, // 👈 تغییر: قیمت واحد به صورت پیش‌فرض صفر ثبت می‌شود
             link: item.link,
           }))
         );

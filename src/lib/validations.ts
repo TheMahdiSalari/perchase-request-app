@@ -6,7 +6,6 @@ export const createRequestSchema = z.object({
   items: z.array(z.object({
     name: z.string().min(2, "نام کالا ضروری است"),
     quantity: z.coerce.number().min(1, "تعداد باید حداقل ۱ باشد"), // coerce یعنی تبدیل رشته به عدد
-    price: z.coerce.number().min(0, "قیمت نمی‌تواند منفی باشد"),
     link: z.string().optional(),
   })).min(1, "حداقل باید یک کالا وارد کنید"),
 });
