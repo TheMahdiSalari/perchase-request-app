@@ -7,12 +7,25 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
+// ۱. تعریف تایپ دقیق نقش‌ها
 type UserRole = 'USER' | 'MANAGER' | 'PROCUREMENT' | 'ADMIN_MANAGER' | 'FINANCE_MANAGER' | 'CEO';
+
+// ۲. تعریف تایپ دقیق برای ورودی پیش‌فاکتورها (جایگزین any)
+type ProformaInput = {
+  id: number;
+  supplier: string;
+  price: number;
+  description?: string;
+  link?: string;
+  selected: boolean;
+  fileName?: string;
+  fileData?: string;
+};
 
 // ورودی اکشن: تایید، رد، یا درخواست پیش‌فاکتور
 export async function processRequest(
   requestId: number, 
-  action: "APPROVE" | "REJECT" | "REQUEST_PROFORMA", // 👈 اکشن جدید
+  action: "APPROVE" | "REJECT" | "REQUEST_PROFORMA",
   comment?: string
 ) {
   const user = await getCurrentUser();
@@ -35,8 +48,7 @@ export async function processRequest(
         nextApproverId = null;
       } 
       else if (action === "REQUEST_PROFORMA") { 
-        // 👈 سناریوی بازگشت به تدارکات
-        // پیدا کردن کاربر تدارکات
+        // سناریوی بازگشت به تدارکات
         const procurementUser = await tx.query.users.findFirst({
           where: eq(users.role, 'PROCUREMENT')
         });
@@ -94,8 +106,8 @@ export async function processRequest(
   redirect("/dashboard/requests");
 }
 
-// 👈 اکشن جدید: ثبت پیش‌فاکتور توسط تدارکات
-export async function submitProformas(requestId: number, proformas: any[]) {
+// ۳. اصلاح ورودی تابع: استفاده از ProformaInput[] به جای any[]
+export async function submitProformas(requestId: number, proformas: ProformaInput[]) {
   const user = await getCurrentUser();
   if (!user || user.role !== 'PROCUREMENT') throw new Error("فقط تدارکات مجاز است");
 
