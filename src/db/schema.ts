@@ -1,19 +1,20 @@
-import { pgTable, serial, text, timestamp, integer, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, integer, pgEnum, json } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
-// ۱. تعریف دقیق نقش‌های سازمانی
+// ۱. اضافه کردن وضعیت جدید WAITING_FOR_PROFORMA
 export const roleEnum = pgEnum('role', [
-  'USER',            // درخواست کننده عادی
-  'MANAGER',         // مدیر مستقیم
-  'PROCUREMENT',     // کارپرداز / تدارکات
-  'ADMIN_MANAGER',   // مدیر اداری
-  'FINANCE_MANAGER', // مدیر مالی
-  'CEO'              // مدیر عامل
+  'USER', 'MANAGER', 'PROCUREMENT', 'ADMIN_MANAGER', 'FINANCE_MANAGER', 'CEO'
 ]);
 
-export const statusEnum = pgEnum('status', ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'NEEDS_ACTION']);
+export const statusEnum = pgEnum('status', [
+  'DRAFT', 
+  'PENDING', 
+  'APPROVED', 
+  'REJECTED', 
+  'NEEDS_ACTION', 
+  'WAITING_FOR_PROFORMA' // 👈 وضعیت جدید: منتظر استعلام قیمت
+]);
 
-// ۲. جدول کاربران
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   name: text('name').notNull(),
@@ -25,7 +26,6 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// ۳. جدول درخواست‌ها
 export const requests = pgTable('requests', {
   id: serial('id').primaryKey(),
   requesterId: integer('requester_id').notNull().references(() => users.id),
@@ -34,11 +34,14 @@ export const requests = pgTable('requests', {
   totalAmount: integer('total_amount').default(0),
   status: statusEnum('status').default('DRAFT'),
   currentApproverId: integer('current_approver_id').references(() => users.id),
+  
+  // 👈 فیلد جدید برای ذخیره ۳ پیش‌فاکتور (JSON)
+  proformaData: json('proforma_data'), 
+  
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-// ۴. آیتم‌های درخواست
 export const requestItems = pgTable('request_items', {
   id: serial('id').primaryKey(),
   requestId: integer('request_id').notNull().references(() => requests.id, { onDelete: 'cascade' }),
@@ -48,7 +51,6 @@ export const requestItems = pgTable('request_items', {
   link: text('link'),
 });
 
-// ۵. لاگ‌ها
 export const requestLogs = pgTable('request_logs', {
   id: serial('id').primaryKey(),
   requestId: integer('request_id').notNull().references(() => requests.id, { onDelete: 'cascade' }),
@@ -58,45 +60,24 @@ export const requestLogs = pgTable('request_logs', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// روابط (Relations)
+// Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
-  manager: one(users, {
-    fields: [users.managerId],
-    references: [users.id],
-    relationName: "manager_subordinates"
-  }),
-  subordinates: many(users, {
-    relationName: "manager_subordinates"
-  }),
+  manager: one(users, { fields: [users.managerId], references: [users.id], relationName: "manager_subordinates" }),
+  subordinates: many(users, { relationName: "manager_subordinates" }),
 }));
 
 export const requestsRelations = relations(requests, ({ one, many }) => ({
-  requester: one(users, {
-    fields: [requests.requesterId],
-    references: [users.id],
-  }),
-  currentApprover: one(users, {
-    fields: [requests.currentApproverId],
-    references: [users.id],
-  }),
+  requester: one(users, { fields: [requests.requesterId], references: [users.id] }),
+  currentApproverId: one(users, { fields: [requests.currentApproverId], references: [users.id] }), // فیکس نام relation
   items: many(requestItems),
   logs: many(requestLogs),
 }));
 
 export const requestItemsRelations = relations(requestItems, ({ one }) => ({
-  request: one(requests, {
-    fields: [requestItems.requestId],
-    references: [requests.id],
-  }),
+  request: one(requests, { fields: [requestItems.requestId], references: [requests.id] }),
 }));
 
 export const requestLogsRelations = relations(requestLogs, ({ one }) => ({
-  request: one(requests, {
-    fields: [requestLogs.requestId],
-    references: [requests.id],
-  }),
-  actor: one(users, {
-    fields: [requestLogs.actorId],
-    references: [users.id],
-  }),
+  request: one(requests, { fields: [requestLogs.requestId], references: [requests.id] }),
+  actor: one(users, { fields: [requestLogs.actorId], references: [users.id] }),
 }));
