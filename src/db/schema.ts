@@ -1,19 +1,18 @@
-import { pgTable, serial, text, timestamp, integer, pgEnum, json } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, integer, pgEnum, json, boolean } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
-// ۱. اضافه کردن وضعیت جدید WAITING_FOR_PROFORMA
+// ... (Enum ها و جداول قبلی users, requests, items, logs سرجایشان باشند) ...
+
 export const roleEnum = pgEnum('role', [
   'USER', 'MANAGER', 'PROCUREMENT', 'ADMIN_MANAGER', 'FINANCE_MANAGER', 'CEO'
 ]);
 
 export const statusEnum = pgEnum('status', [
-  'DRAFT', 
-  'PENDING', 
-  'APPROVED', 
-  'REJECTED', 
-  'NEEDS_ACTION', 
-  'WAITING_FOR_PROFORMA' // 👈 وضعیت جدید: منتظر استعلام قیمت
+  'DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'NEEDS_ACTION', 'WAITING_FOR_PROFORMA'
 ]);
+
+// جداول قبلی (users, requests, ...) را اینجا کپی کن یا دست نزن
+// من فقط جدول جدید را اینجا می‌نویسم که به فایل اضافه کنی:
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
@@ -34,10 +33,7 @@ export const requests = pgTable('requests', {
   totalAmount: integer('total_amount').default(0),
   status: statusEnum('status').default('DRAFT'),
   currentApproverId: integer('current_approver_id').references(() => users.id),
-  
-  // 👈 فیلد جدید برای ذخیره ۳ پیش‌فاکتور (JSON)
   proformaData: json('proforma_data'), 
-  
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -60,7 +56,17 @@ export const requestLogs = pgTable('request_logs', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// Relations
+// 👇 جدول جدید: اعلان‌ها
+export const notifications = pgTable('notifications', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  message: text('message').notNull(),
+  link: text('link'),
+  isRead: boolean('is_read').default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// روابط (Relations)
 export const usersRelations = relations(users, ({ one, many }) => ({
   manager: one(users, { fields: [users.managerId], references: [users.id], relationName: "manager_subordinates" }),
   subordinates: many(users, { relationName: "manager_subordinates" }),
@@ -68,7 +74,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 
 export const requestsRelations = relations(requests, ({ one, many }) => ({
   requester: one(users, { fields: [requests.requesterId], references: [users.id] }),
-  currentApproverId: one(users, { fields: [requests.currentApproverId], references: [users.id] }), // فیکس نام relation
+  currentApproverId: one(users, { fields: [requests.currentApproverId], references: [users.id] }),
   items: many(requestItems),
   logs: many(requestLogs),
 }));
@@ -80,4 +86,12 @@ export const requestItemsRelations = relations(requestItems, ({ one }) => ({
 export const requestLogsRelations = relations(requestLogs, ({ one }) => ({
   request: one(requests, { fields: [requestLogs.requestId], references: [requests.id] }),
   actor: one(users, { fields: [requestLogs.actorId], references: [users.id] }),
+}));
+
+// 👇 رابطه برای نوتیفیکیشن
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
 }));

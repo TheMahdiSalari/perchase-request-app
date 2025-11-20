@@ -6,11 +6,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { createNotification } from "@/actions/notifications"; // 👈 اضافه شد
 
-// ۱. تعریف تایپ دقیق نقش‌ها
 type UserRole = 'USER' | 'MANAGER' | 'PROCUREMENT' | 'ADMIN_MANAGER' | 'FINANCE_MANAGER' | 'CEO';
 
-// ۲. تعریف تایپ دقیق برای ورودی پیش‌فاکتورها (جایگزین any)
 type ProformaInput = {
   id: number;
   supplier: string;
@@ -22,7 +21,6 @@ type ProformaInput = {
   fileData?: string;
 };
 
-// ورودی اکشن: تایید، رد، یا درخواست پیش‌فاکتور
 export async function processRequest(
   requestId: number, 
   action: "APPROVE" | "REJECT" | "REQUEST_PROFORMA",
@@ -46,9 +44,15 @@ export async function processRequest(
       if (action === "REJECT") {
         nextStatus = "REJECTED";
         nextApproverId = null;
+        
+        // 👈 اعلان رد شدن به درخواست کننده
+        await createNotification(
+            request.requesterId,
+            `درخواست #${requestId} شما رد شد. علت: ${comment || 'بدون توضیح'}`,
+            `/dashboard/requests/${requestId}`
+        );
       } 
       else if (action === "REQUEST_PROFORMA") { 
-        // سناریوی بازگشت به تدارکات
         const procurementUser = await tx.query.users.findFirst({
           where: eq(users.role, 'PROCUREMENT')
         });
@@ -58,9 +62,15 @@ export async function processRequest(
         nextStatus = "WAITING_FOR_PROFORMA";
         nextApproverId = procurementUser.id;
         comment = comment || "جهت استعلام قیمت و بارگذاری پیش‌فاکتور عودت داده شد";
+
+        // 👈 اعلان به تدارکات
+        await createNotification(
+            procurementUser.id,
+            `درخواست #${requestId} جهت اخذ استعلام به شما بازگشت داده شد.`,
+            `/dashboard/requests/${requestId}`
+        );
       } 
       else {
-        // منطق عادی تایید
         const currentRole = user.role;
         let nextRole = '';
           
@@ -73,12 +83,29 @@ export async function processRequest(
         if (nextRole === 'FINISHED') {
           nextStatus = "APPROVED";
           nextApproverId = null;
+
+          // 👈 اعلان تایید نهایی به درخواست کننده
+          await createNotification(
+            request.requesterId,
+            `تبریک! درخواست #${requestId} شما تایید نهایی شد.`,
+            `/dashboard/requests/${requestId}`
+          );
         } else {
           const nextUser = await tx.query.users.findFirst({
             where: eq(users.role, nextRole as UserRole)
           });
+          
           nextApproverId = nextUser ? nextUser.id : null;
           nextStatus = nextUser ? "PENDING" : "APPROVED";
+
+          // 👈 اعلان به نفر بعدی
+          if (nextUser) {
+            await createNotification(
+                nextUser.id,
+                `درخواست #${requestId} جهت بررسی در کارتابل شما قرار گرفت.`,
+                `/dashboard/requests/${requestId}`
+            );
+          }
         }
       }
 
@@ -106,19 +133,16 @@ export async function processRequest(
   redirect("/dashboard/requests");
 }
 
-// ۳. اصلاح ورودی تابع: استفاده از ProformaInput[] به جای any[]
 export async function submitProformas(requestId: number, proformas: ProformaInput[]) {
   const user = await getCurrentUser();
   if (!user || user.role !== 'PROCUREMENT') throw new Error("فقط تدارکات مجاز است");
 
-  // پیدا کردن مدیر مالی برای ارسال مجدد
   const financeUser = await db.query.users.findFirst({
     where: eq(users.role, 'FINANCE_MANAGER')
   });
 
   if (!financeUser) throw new Error("مدیر مالی یافت نشد");
 
-  // محاسبه قیمت انتخابی
   const selectedProforma = proformas.find(p => p.selected);
   const finalAmount = selectedProforma ? selectedProforma.price : 0;
 
@@ -126,9 +150,9 @@ export async function submitProformas(requestId: number, proformas: ProformaInpu
     await db.transaction(async (tx) => {
       await tx.update(requests).set({
         proformaData: proformas,
-        totalAmount: finalAmount, // آپدیت قیمت نهایی
-        status: 'PENDING', // برمی‌گردد به حالت عادی
-        currentApproverId: financeUser.id, // میره مستقیم برای مدیر مالی
+        totalAmount: finalAmount,
+        status: 'PENDING',
+        currentApproverId: financeUser.id,
         updatedAt: new Date()
       }).where(eq(requests.id, requestId));
 
@@ -138,6 +162,13 @@ export async function submitProformas(requestId: number, proformas: ProformaInpu
         action: 'SUBMIT',
         comment: `پیش‌فاکتورها بارگذاری شد (انتخاب شده: ${selectedProforma?.supplier})`,
       });
+
+      // 👈 اعلان به مدیر مالی
+      await createNotification(
+        financeUser.id,
+        `پیش‌فاکتورهای درخواست #${requestId} بارگذاری شد. منتظر تایید شما.`,
+        `/dashboard/requests/${requestId}`
+      );
     });
 
     revalidatePath(`/dashboard/requests/${requestId}`);

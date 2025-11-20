@@ -5,6 +5,7 @@ import { requests, requestItems, requestLogs } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { createRequestSchema, CreateRequestValues } from "@/lib/validations";
 import { redirect } from "next/navigation";
+import { createNotification } from "@/actions/notifications"; // 👈 اضافه شد
 
 export async function submitRequest(data: CreateRequestValues) {
   const user = await getCurrentUser();
@@ -16,8 +17,6 @@ export async function submitRequest(data: CreateRequestValues) {
   }
 
   const { title, description, items } = validatedFields.data;
-  
-  // 👈 تغییر: چون قیمت نداریم، مبلغ کل فعلاً صفر است
   const totalAmount = 0;
 
   try {
@@ -40,7 +39,7 @@ export async function submitRequest(data: CreateRequestValues) {
             requestId: newRequest.id,
             name: item.name,
             quantity: item.quantity,
-            price: 0, // 👈 تغییر: قیمت واحد به صورت پیش‌فرض صفر ثبت می‌شود
+            price: 0,
             link: item.link,
           }))
         );
@@ -52,6 +51,15 @@ export async function submitRequest(data: CreateRequestValues) {
         action: 'SUBMIT',
         comment: 'درخواست ثبت شد',
       });
+
+      // 👈 ارسال اعلان به مدیر مستقیم (اگر وجود داشته باشد)
+      if (approverId) {
+        await createNotification(
+            approverId,
+            `درخواست جدید از ${user.name}: "${title}"`,
+            `/dashboard/requests/${newRequest.id}`
+        );
+      }
     });
 
   } catch (error: unknown) {

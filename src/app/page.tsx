@@ -2,10 +2,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, CheckCircle2, ShieldCheck, Zap } from "lucide-react";
+import React from "react"; // برای تایپ ElementType
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col" dir="rtl">
       
       {/* هدر ساده */}
       <header className="p-6 flex justify-between items-center max-w-6xl mx-auto w-full">
@@ -73,8 +74,8 @@ export default function Home() {
   );
 }
 
-// کامپوننت کوچک برای کارت‌های ویژگی
-function FeatureCard({ icon: Icon, title, desc }: { icon: any, title: string, desc: string }) {
+// 👇 اصلاح شده: استفاده از React.ElementType به جای any
+function FeatureCard({ icon: Icon, title, desc }: { icon: React.ElementType, title: string, desc: string }) {
   return (
     <Card className="border-none shadow-md bg-white/50 hover:bg-white transition-colors">
       <CardContent className="pt-6 text-right">

@@ -3,17 +3,15 @@ import { requests, requestLogs } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { count, eq, and, desc, sum } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge"; // 👈 این خط اضافه شد
+import { Badge } from "@/components/ui/badge";
 import { 
   FileText, 
   CheckCircle2, 
   Clock, 
   AlertTriangle, 
-  TrendingUp, 
   Wallet, 
   Activity,
-  ArrowLeft,
-  Check
+  ArrowLeft
 } from "lucide-react";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -26,7 +24,7 @@ export default async function DashboardPage() {
   const isFinanceOrCEO = user.role === 'FINANCE_MANAGER' || user.role === 'CEO';
   const isProcurement = user.role === 'PROCUREMENT';
 
-  // ۱. آمارها (به صورت موازی)
+  // ۱. دریافت آمارها
   const [
     pendingActionCount,
     myTotalRequests,
@@ -35,17 +33,14 @@ export default async function DashboardPage() {
     latestLogs
   ] = await Promise.all([
     
-    // کوئری ۱: کارتابل (نیاز به اقدام)
     db.select({ value: count() })
       .from(requests)
       .where(eq(requests.currentApproverId, user.id)),
 
-    // کوئری ۲: کل درخواست‌ها
     db.select({ value: count() })
       .from(requests)
       .where(isFinanceOrCEO ? undefined : eq(requests.requesterId, user.id)),
 
-    // کوئری ۳: درخواست‌های تایید شده
     db.select({ value: count() })
       .from(requests)
       .where(and(
@@ -53,7 +48,6 @@ export default async function DashboardPage() {
         isFinanceOrCEO ? undefined : eq(requests.requesterId, user.id)
       )),
 
-    // کوئری ۴: جمع مبلغ
     db.select({ value: sum(requests.totalAmount) })
       .from(requests)
       .where(and(
@@ -61,7 +55,6 @@ export default async function DashboardPage() {
         isFinanceOrCEO ? undefined : eq(requests.requesterId, user.id)
       )),
 
-    // کوئری ۵: آخرین فعالیت‌ها
     db.query.requestLogs.findMany({
       where: isFinanceOrCEO ? undefined : eq(requestLogs.actorId, user.id),
       with: { 
@@ -84,7 +77,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       
-      {/* === بخش ۱: خوش‌آمدگویی === */}
+      {/* هدر */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-800">داشبورد مدیریت</h1>
@@ -101,9 +94,9 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* === بخش ۲: هشدار کارتابل === */}
+      {/* هشدار کارتابل */}
       {inboxCount > 0 && (
-        <div className="bg-orange-50 border border-orange-200 rounded-xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-in fade-in slide-in-from-top-5">
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
             <div className="flex items-center gap-4">
                 <div className="bg-orange-100 p-3 rounded-full">
                     <AlertTriangle className="w-6 h-6 text-orange-600" />
@@ -122,9 +115,8 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* === بخش ۳: کارت‌های آمار === */}
+      {/* کارت‌های آمار */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        
         <Card className="border-t-4 border-t-blue-500 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -136,9 +128,6 @@ export default async function DashboardPage() {
             <div className="text-2xl font-bold text-slate-800">
                 {stats.totalSpent.toLocaleString()} <span className="text-xs text-muted-foreground font-normal">تومان</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              مجموع اقلام تایید نهایی شده
-            </p>
           </CardContent>
         </Card>
 
@@ -149,9 +138,6 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-800">{stats.total}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              تعداد کل درخواست‌های ثبت شده
-            </p>
           </CardContent>
         </Card>
 
@@ -162,9 +148,6 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-800">{stats.approved}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              درخواست‌های تکمیل شده
-            </p>
           </CardContent>
         </Card>
 
@@ -177,16 +160,13 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-800">{stats.total - stats.approved}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-               {isProcurement ? 'درخواست‌های منتظر پیش‌فاکتور' : 'در حال گردش در سازمان'}
-            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* === بخش ۴: فعالیت‌ها و دسترسی سریع === */}
       <div className="grid grid-cols-1 md:grid-cols-7 gap-6">
         
+        {/* لیست فعالیت‌ها - اصلاح شده */}
         <Card className="md:col-span-4 lg:col-span-5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -196,33 +176,53 @@ export default async function DashboardPage() {
             <CardDescription>۵ فعالیت اخیر مربوط به شما یا زیرمجموعه شما</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-6"> {/* فاصله بیشتر بین آیتم‌ها */}
                 {latestLogs.length === 0 ? (
                     <p className="text-center text-muted-foreground py-4 text-sm">هنوز فعالیتی ثبت نشده است.</p>
                 ) : (
                     latestLogs.map((log) => (
-                        <div key={log.id} className="flex items-center justify-between border-b last:border-0 pb-4 last:pb-0">
-                            <div className="flex items-center gap-3">
-                                <div className={`w-2 h-2 rounded-full ${
-                                    log.action === 'APPROVE' ? 'bg-green-500' : 
-                                    log.action === 'REJECT' ? 'bg-red-500' : 'bg-blue-500'
-                                }`} />
-                                <div className="flex flex-col">
-                                    <span className="text-sm font-medium">
-                                        {log.actor.name} 
-                                        <span className="text-muted-foreground mx-1">
-                                            {log.action === 'SUBMIT' ? 'درخواستی ثبت کرد:' : 
-                                             log.action === 'APPROVE' ? 'درخواستی را تایید کرد:' : 
-                                             log.action === 'REQUEST_PROFORMA' ? 'درخواست پیش‌فاکتور داد:' : 'درخواستی را رد کرد:'}
-                                        </span>
-                                        <span className="text-slate-800 mr-1">`‍{log.request?.title}`‍‍</span>
+                        <div key={log.id} className="flex gap-3 relative">
+                            {/* خط عمودی تایم‌لاین */}
+                            <div className="absolute top-2 bottom-[-24px] right-[5px] w-0.5 bg-slate-100 last:hidden"></div>
+
+                            {/* دایره رنگی */}
+                            <div className={`relative z-10 w-3 h-3 mt-1.5 rounded-full flex-shrink-0 ${
+                                log.action === 'APPROVE' ? 'bg-green-500' : 
+                                log.action === 'REJECT' ? 'bg-red-500' : 
+                                log.action === 'REQUEST_PROFORMA' ? 'bg-orange-500' : 'bg-blue-500'
+                            }`} />
+                            
+                            {/* محتوای متنی */}
+                            <div className="flex flex-col gap-1 w-full">
+                                {/* سطر اول: نام کاربر و تاریخ */}
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm font-bold text-slate-800">{log.actor.name}</span>
+                                    <span className="text-[10px] text-slate-400 dir-ltr font-mono">
+                                        {log.createdAt ? new Date(log.createdAt).toLocaleDateString('fa-IR') : ''}
                                     </span>
-                                    <span className="text-xs text-muted-foreground mt-0.5">{log.comment}</span>
                                 </div>
+
+                                {/* سطر دوم: نوع عملیات */}
+                                <span className="text-xs text-muted-foreground">
+                                    {log.action === 'SUBMIT' ? 'یک درخواست جدید ثبت کرد' : 
+                                     log.action === 'APPROVE' ? 'درخواست زیر را تایید کرد' : 
+                                     log.action === 'REQUEST_PROFORMA' ? 'درخواست استعلام قیمت داد' : 'درخواست را رد کرد'}
+                                </span>
+
+                                {/* سطر سوم: عنوان درخواست (در باکس جداگانه) */}
+                                <div className="mt-1">
+                                    <div className="inline-block bg-slate-100 px-3 py-1 rounded text-sm font-medium text-slate-700 border border-slate-200">
+                                        {log.request?.title || "بدون عنوان"}
+                                    </div>
+                                </div>
+
+                                {/* سطر چهارم: کامنت */}
+                                {log.comment && (
+                                    <p className="text-xs text-slate-500 mt-1 italic bg-yellow-50/50 p-2 rounded border border-yellow-100">
+                                        `{log.comment}`
+                                    </p>
+                                )}
                             </div>
-                            <span className="text-[10px] text-slate-400 whitespace-nowrap dir-ltr">
-                                {log.createdAt ? new Date(log.createdAt).toLocaleDateString('fa-IR') : ''}
-                            </span>
                         </div>
                     ))
                 )}
@@ -230,6 +230,7 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* دسترسی سریع */}
         <Card className="md:col-span-3 lg:col-span-2 bg-slate-50/50">
             <CardHeader>
                 <CardTitle className="text-base">دسترسی سریع</CardTitle>
@@ -250,16 +251,6 @@ export default async function DashboardPage() {
                     </div>
                     {inboxCount > 0 && <Badge className="bg-orange-500 h-5 px-1.5">{inboxCount}</Badge>}
                 </Link>
-
-                {isFinanceOrCEO && (
-                    <Link href="/dashboard/requests" className="flex items-center justify-between p-3 bg-white border rounded hover:shadow-sm transition-all group">
-                        <div className="flex items-center gap-3">
-                            <div className="bg-green-100 text-green-600 p-2 rounded-lg"><TrendingUp size={18}/></div>
-                            <span className="text-sm font-medium">گزارشات مالی</span>
-                        </div>
-                        <ArrowLeft size={16} className="text-slate-300 group-hover:text-primary transition-colors"/>
-                    </Link>
-                )}
             </CardContent>
         </Card>
 
